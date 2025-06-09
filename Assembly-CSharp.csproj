@@ -54,11 +54,14 @@
   <ItemGroup>
      <Compile Include="Assets\Script\BikeControl.cs" />
      <Compile Include="Assets\Script\BikeController.cs" />
+     <Compile Include="Assets\RoadRock\Scripts\SceneViewText.cs" />
      <Compile Include="Assets\Script\BikeJumpController.cs" />
-     <Compile Include="Assets\Script\CameraController.cs" />
      <Compile Include="Assets\Script\TitleScreen.cs" />
+     <Compile Include="Assets\Script\CameraController.cs" />
+     <Compile Include="Assets\Script\Success.cs" />
      <None Include="Assets\TextMesh Pro\Shaders\TMPro.cginc" />
      <None Include="Assets\TextMesh Pro\Shaders\TMP_SDF-Mobile Overlay.shader" />
+     <None Include="Assets\RoadRock\README.txt" />
      <None Include="Assets\TextMesh Pro\Shaders\TMP_Bitmap.shader" />
      <None Include="Assets\TextMesh Pro\Shaders\TMPro_Mobile.cginc" />
      <None Include="Assets\TextMesh Pro\Shaders\TMP_SDF SSD.shader" />

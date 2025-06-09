@@ -38,7 +38,14 @@ public class BikeController : MonoBehaviour
 
     private CameraController _cameraController;
 
-
+    // 输入标志变量
+    private bool spacePressed = false;
+    private bool spaceHeld = false;
+    private bool spaceReleased = false;
+    private bool cPressed = false;
+    private bool vPressed = false;
+    
+    
     void Start()
     {        
         camera = GameObject.FindGameObjectWithTag("MainCamera");
@@ -53,6 +60,26 @@ public class BikeController : MonoBehaviour
         frontWheel = transform.Find("FrontWheel");
     }
 
+    void Update()
+    {
+        if(Input.GetKeyDown(KeyCode.Space))
+            spacePressed = true;
+        if(Input.GetKey(KeyCode.Space))
+            spaceHeld = true;
+        if(Input.GetKeyUp(KeyCode.Space))
+            spaceReleased = true;
+        if(Input.GetKeyDown(KeyCode.C))
+            cPressed = true;
+        if(Input.GetKeyDown(KeyCode.V))
+            vPressed = true;
+        /*spacePressed = Input.GetKeyDown(KeyCode.Space);
+        spaceHeld = Input.GetKey(KeyCode.Space);
+        spaceReleased = Input.GetKeyUp(KeyCode.Space);
+        cPressed = Input.GetKeyDown(KeyCode.C);*/
+    }
+
+    
+    
     void FixedUpdate()
     {
         switch (state)
@@ -61,7 +88,6 @@ public class BikeController : MonoBehaviour
                 CheckEnterSingleWheelMode();
                 ApplyForwardMovement();
                 ApplyBalanceControl();
-                CheckFail();
                 break;
 
             case BikeState.SingleWheel:
@@ -76,8 +102,13 @@ public class BikeController : MonoBehaviour
                 JumpingControl();
                 break;
         }
+        CheckFail();
         
-        
+        spacePressed = false;
+        spaceHeld = false;
+        spaceReleased = false;
+        cPressed = false;
+        vPressed = false;
     }
 
     private void CheckFail()
@@ -94,6 +125,22 @@ public class BikeController : MonoBehaviour
         panel.SetActive(true);
     }
 
+    //检查是否进入单轮状态
+    void CheckEnterSingleWheelMode()
+    {
+        float tilt = Vector3.Dot(transform.forward, Vector3.down); // 如果是X轴前进，forward表示左右方向
+        if (Mathf.Abs(tilt) < balanceThreshold && spacePressed)
+        {
+            // 锁定当前姿态
+            rb.angularVelocity = Vector3.zero;
+            rb.velocity = Vector3.zero;
+            rb.useGravity = false; // 暂停重力
+            
+            // 进入单轮状态
+            state = BikeState.SingleWheel;
+            _cameraController.isFree = true;
+        }
+    }
 
     //状态一：控制前进
     void ApplyForwardMovement()
@@ -102,15 +149,26 @@ public class BikeController : MonoBehaviour
         float tilt = Vector3.Dot(transform.forward, Vector3.down); // 向左倾为正
 
         // 计算当前倾斜影响的前进方向（绕Y轴旋转）
-        Vector3 forwardDir = Quaternion.AngleAxis(tilt * steerSensitivity, Vector3.down) * transform.right;
+        Vector3 forwardDir = Quaternion.AngleAxis(tilt * steerSensitivity, Vector3.down) * Vector3.right;
 
         // 施加前进力（始终向前）
-        rb.AddForce(forwardDir.normalized * forwardForce);
+        //if (Input.GetKey(KeyCode.W))
+            rb.AddForce(forwardDir.normalized * forwardForce);
     }
 
     //状态一：控制人为倾斜
     void ApplyBalanceControl()
     {
+        //检测落地
+        var coll1 = Physics.OverlapSphere(frontWheel.position, 0.2f, LayerMask.GetMask("Ground"));
+        var coll2  = Physics.OverlapSphere(backWheel.position, 0.2f, LayerMask.GetMask("Ground"));
+        bool isGround = coll1.Length > 0 && coll2.Length > 0;
+        if (!isGround)
+        {
+            return;
+        }
+        
+        
         // 倾斜过度直接不允许矫正
         float angle = Mathf.Abs(Vector3.Angle(transform.forward, Vector3.up));
         if (angle < maxTiltAngle || angle > 180-maxTiltAngle)
@@ -128,26 +186,21 @@ public class BikeController : MonoBehaviour
     
     
     
-    //检查是否进入单轮状态
-    void CheckEnterSingleWheelMode()
-    {
-        float tilt = Vector3.Dot(transform.forward, Vector3.down); // 如果是X轴前进，forward表示左右方向
-        if (Mathf.Abs(tilt) < balanceThreshold && Input.GetKeyUp(KeyCode.Space))
-        {
-            // 锁定当前姿态
-            rb.angularVelocity = Vector3.zero;
-            rb.velocity = Vector3.zero;
-            rb.useGravity = false; // 暂停重力
-            
-            // 进入单轮状态
-            state = BikeState.SingleWheel;
-            _cameraController.isFree = true;
-        }
-    }
+
 
     //状态二：控制前后平衡
     void HandleBalanceControl()
     {
+        // 按 C 进入蓄力状态
+        if (cPressed)
+        {
+            // 锁定当前姿态
+            rb.angularVelocity = Vector3.zero;
+            rb.velocity = Vector3.zero;
+            
+            state = BikeState.Chagring;
+        }
+        
         Vector3 downForce = -transform.up * 30f; // 增加吸地力
         rb.AddForceAtPosition(downForce, backWheel.position, ForceMode.Force);
         
@@ -166,22 +219,27 @@ public class BikeController : MonoBehaviour
 
         // 在车体的“前方”施加力以模拟绕后轮旋转
         rb.AddForceAtPosition(forceDir, frontWheel.position);
-        
-        // 控制前后平衡时进入蓄力状态
-        if (Input.GetKeyUp(KeyCode.Space))
-        {
-            // 锁定当前姿态
-            rb.angularVelocity = Vector3.zero;
-            rb.velocity = Vector3.zero;
-            
-            state = BikeState.Chagring;
-        }
     }
 
     //状态二：跳跃蓄力
     void HandleCharging()
     {
-        if (Input.GetKey(KeyCode.Space))
+        rb.freezeRotation = true;
+        
+        // 按 V 退出蓄力状态
+        if (vPressed)
+        {
+            // 锁定当前姿态
+            rb.angularVelocity = Vector3.zero;
+            rb.velocity = Vector3.zero;
+            transform.rotation = Quaternion.Euler(0, 0, 0);
+            rb.freezeRotation = false;
+            
+            _cameraController.isFree = false;
+            state = BikeState.Normal;
+        }
+        
+        if (spaceHeld)
         {
             if (!isCharging)
             {
@@ -193,7 +251,7 @@ public class BikeController : MonoBehaviour
             chargeTimer = Mathf.Clamp(chargeTimer, 0f, maxChargeTime);
         }
 
-        if (Input.GetKeyUp(KeyCode.Space) && isCharging)
+        if (spaceReleased && isCharging)
         {
             isCharging = false;
             rb.useGravity = true;
@@ -205,10 +263,10 @@ public class BikeController : MonoBehaviour
             Vector3 jumpDir = transform.right.normalized;
             //rb.AddForce(jumpDir * actualForce, ForceMode.Impulse);
             rb.velocity = jumpDir * actualForce;
-            state = BikeState.Jumping;
+            //state = BikeState.Jumping;
             //Debug.Log(jumpForce);
             
-            _cameraController.isFree = false;
+            //_cameraController.isFree = false;
         }
     }
     
@@ -217,14 +275,13 @@ public class BikeController : MonoBehaviour
         float input = Input.GetAxis("Vertical"); // W/S 控制
         
         Vector3 forceDir = input * 10f * transform.up ;
-
-        // 在车体的“前方”施加力以模拟绕后轮旋转
+        
         rb.AddForceAtPosition(-forceDir, frontWheel.position);
         rb.AddForceAtPosition(forceDir, backWheel.position);
         
         //检测落地
-        var coll1 = Physics.OverlapSphere(frontWheel.position, 0.1f, LayerMask.GetMask("Ground"));
-        var coll2  = Physics.OverlapSphere(backWheel.position, 0.1f, LayerMask.GetMask("Ground"));
+        var coll1 = Physics.OverlapSphere(frontWheel.position, 0.2f, LayerMask.GetMask("Ground"));
+        var coll2  = Physics.OverlapSphere(backWheel.position, 0.2f, LayerMask.GetMask("Ground"));
         bool isGround = coll1.Length > 0 && coll2.Length > 0;
         if (isGround)
         {
@@ -232,6 +289,7 @@ public class BikeController : MonoBehaviour
             rb.velocity = new Vector3(rb.velocity.x, 0, rb.velocity.z);
             transform.rotation = Quaternion.Euler(0, 0, 0);
         }
+        
             
     }
 }
